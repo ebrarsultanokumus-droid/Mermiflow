@@ -1,0 +1,39 @@
+rules_version = '2';
+
+// MermiFlow – Sicherheitsregeln für Firestore
+// WICHTIG: Ersetze deine@email.de (2x unten) durch deine echte Admin-E-Mail – genau wie in config.js.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      return signedIn() && request.auth.token.email == 'deine@email.de';
+    }
+    function approved() {
+      return isAdmin() || (signedIn()
+        && exists(/databases/$(database)/documents/approvals/$(request.auth.uid))
+        && get(/databases/$(database)/documents/approvals/$(request.auth.uid)).data.approved == true);
+    }
+
+    // Profile: alle Angemeldeten dürfen lesen, jede nur ihr eigenes Profil ändern (Admin alle)
+    match /members/{uid} {
+      allow read: if signedIn();
+      allow write: if signedIn() && (request.auth.uid == uid || isAdmin());
+    }
+
+    // Freigaben: nur die Admin darf schreiben
+    match /approvals/{uid} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // Chat, Feed, Kalender, Spiele: nur freigegebene Mitglieder
+    match /chat/{id}   { allow read, write: if approved(); }
+    match /posts/{id}  { allow read, write: if approved(); }
+    match /events/{id} { allow read, write: if approved(); }
+    match /games/{id}  { allow read, write: if approved(); }
+  }
+}
